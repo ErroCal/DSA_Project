@@ -1,0 +1,361 @@
+#library loading
+library(tidyverse)
+library(dplyr)
+library(knitr)
+library(tidyr)
+library(ggplot2)
+library(VIM)
+library(mice)
+library(car)
+library(MASS)
+library(naniar)
+library(corrplot)
+#initialize data into df, don't forget the "-" around the filename
+housingData <- read.csv("housingData.csv")
+housingData <- as_tibble(housingData)
+
+
+############### PROBLEM 1
+
+###(a)
+# set up new variables!
+housingData <- housingData %>%
+  dplyr::mutate(age = YrSold - YearBuilt,
+                ageSinceRemodel = YrSold - YearRemodAdd,
+                ageofGarage = YrSold - GarageYrBlt)
+
+### (b)
+#create housingNumeric for numeric variables in housingData
+housingNumeric <- housingData |>
+  dplyr::select(where(is.numeric))
+
+
+### (c)
+housingFactor <- housingData |>
+  dplyr::select(!where(is.numeric)) |>
+  mutate(across(everything(),as.factor))
+
+###(d)
+#look at the new variables
+glimpse(housingNumeric)
+glimpse(housingFactor)
+
+### (e)
+# creates extraction funciton for R
+Q1<-function(x,na.rm=TRUE) {
+  quantile(x,na.rm=na.rm)[2]
+}
+Q3<-function(x,na.rm=TRUE) {
+  quantile(x,na.rm=na.rm)[4]
+}
+#### EXPLAIN FUNCTIONS
+
+### (f) new function for summary statistics
+myNumericSummary <- function(x){
+  c(length(x), n_distinct(x), sum(is.na(x)), mean(x, na.rm=TRUE),
+    min(x,na.rm=TRUE), Q1(x,na.rm=TRUE), median(x,na.rm=TRUE), Q3(x,na.rm=TRUE),
+    max(x,na.rm=TRUE), sd(x,na.rm=TRUE))
+}
+
+### (g) summarize and save as new tibble "numericSummary"
+numericSummary <- housingNumeric |> 
+  reframe(across(everything(),myNumericSummary))
+# reframe necessary for new version of R
+
+### (h) bind column labels to the summary
+numericSummary <-cbind(
+  stat=c("n","unique","missing","mean","min","Q1","median","Q3","max","sd"),
+  numericSummary)
+
+glimpse(numericSummary)
+
+### (i) pivot the data a bit
+numericSummaryFinal <- numericSummary %>%
+  pivot_longer("Id":"ageofGarage", names_to = "variable", values_to = "value") %>%
+  pivot_wider(names_from = stat, values_from = value) %>%
+  mutate(missing_pct = 100*missing/n,
+         unique_pct = 100*unique/n) %>%
+  select(variable, n, missing, missing_pct, unique, unique_pct, everything())
+
+#Final production of Data Quality Report
+options(digits=3)
+options(scipen=99)
+numericSummaryFinal %>% kable(align = "c")
+
+### (j) Create the 2nd part of the DQR for the factor data
+
+## new functions necessary
+# identication of 1st 2nd least common modes
+getmodes <- function(v,type=1) {
+  tbl <- table(v)
+  m1<-which.max(tbl)
+  if (type==1) {
+    return (names(m1)) #1st mode
+  }
+  else if (type==2) {
+    return (names(which.max(tbl[-m1]))) #2nd mode
+  }
+  else if (type==-1) {
+    return (names(which.min(tbl))) #least common mode
+  }
+  else {
+    stop("Invalid type selected")
+  }
+}
+
+# Frequencies of 1st 2nd leas common modes.
+
+getmodesFrq <- function(v,type=1) {
+  tbl <- table(v)
+  m1<-which.max(tbl)
+  if (type==1) {
+    return (max(tbl)) #1st mode freq
+  }
+  else if (type==2) {
+    return (max(tbl[-m1])) #2nd mode freq
+  }
+  else if (type==-1) {
+    return (min(tbl)) #least common freq
+  }
+  else {
+    stop("Invalid type selected")
+  }
+}
+
+#create new function for factor summary
+
+myFactorSummary <- function(x) {
+  c(length(x), n_distinct(x), sum(is.na(x)), 
+    getmodes(x,type=1),getmodesFrq(x,type=1),
+    getmodes(x,type=2),getmodesFrq(x,type=2),
+    getmodes(x,type=-1),getmodesFrq(x,type=-1))
+}
+
+#Run the function across all factors
+factorSummary <- housingFactor |> 
+  reframe(across(everything(),myFactorSummary))
+factorSummary
+## Columns Necessary: 
+# variable, n, missing, 1st Mode, 1st Frq, 2nd Mode, 
+# 2nd Freq, least common, least common Freq
+
+#add the colummns to the factor summary frame
+factorSummary <- cbind(stat=c("n", "unique", "missing", 
+          "1st Mode", "Frq_1", "2nd Mode", "Frq_2",
+          "least common","least common Freq"),factorSummary)
+glimpse(factorSummary)
+
+#add in the last few bits to the summary and 'pivot' the table.
+factorSummaryFinal <- factorSummary %>%
+  pivot_longer("MSZoning":"SaleType", names_to = "variable", values_to = "value") %>%
+  pivot_wider(names_from = stat, values_from = value) %>%
+  mutate(missing_pct = 100*(as.numeric(missing)/as.numeric(n)),
+         unique_pct = 100*(as.numeric(unique)/(as.numeric(n))),
+         freqRatio = as.numeric(Frq_1)/as.numeric(Frq_2)) %>%
+  select(variable, n, missing, missing_pct, unique, unique_pct, freqRatio, everything())
+
+#reset the char to factors
+factorSummaryFinal <- factorSummaryFinal |>
+  mutate(across(where(is.character),as.factor))
+
+
+#finally making the table
+options(digits=3)
+options(scipen=99)
+factorSummaryFinal %>% kable(align = "c")
+
+
+
+################## PROBLEM 2
+### Data visualization and Transformations
+
+### (a) Transform highly skewed data to a more 'normal' distrobution
+# Find the skew! Has to be numeric! 
+#using the summary, look for high sd or variation.
+View(numericSummaryFinal)
+
+#plot a histogram of everything (but that is readable) to find skewed data
+par(mfrow = c(3, 4))
+lapply(names(housingNumeric), function(x)
+  hist(housingNumeric[[x]], main = x))
+
+#candidates for transformation:
+#LotArea, WoodDeckSF, SalePrice
+
+#plot to pdf as they are too big for RStudio
+pdf("symbox_outputs_4.pdf",width = 12, height = 8)
+par(mfrow = c(4,1))
+symbox(housingNumeric$LotArea, powers = c(-2,-1,0,1,2))
+symbox(housingNumeric$WoodDeckSF, powers = c(-2,-1.5,-1,0,1,1.5,2))
+symbox(housingNumeric$SalePrice, powers = c(-2,-1.5,-1,0,1,1.5,2))
+symbox(housingNumeric$BsmtUnfSF, powers = c(-2,-1,-.5,0,1,1.5,2))
+dev.off()
+
+hist(housingNumeric$LotArea)
+
+#log power the variables
+T_LotArea <- log(housingNumeric$LotArea)
+T_WoodDeckSF <- log(housingNumeric$WoodDeckSF)
+T_SalePrice <- log(housingNumeric$SalePrice)
+#Output the histograms and transformed distrobutions
+pdf("T_LotArea_Test2.pdf", width = 12, height = 8)
+par(mfrow = c(1,2))
+hist(housingNumeric$LotArea)
+hist(T_LotArea)
+dev.off()
+
+pdf("T_WoodDeckSF.pdf", width =12, height = 8)
+par(mfrow = c(1,2))
+hist(housingNumeric$WoodDeckSF)
+hist(T_WoodDeckSF)
+dev.off()
+
+pdf("T_SalePrice.pdf", width=12, height=8)
+par(mfrow = c(1,2))
+hist(housingNumeric$SalePrice)
+hist(T_SalePrice)
+dev.off()
+
+library(naniar)
+### (b) LotFrontage needs missing value vizualization
+# big plot of everything
+pdf("aggr_plot_housingNumeric_finally.pdf", width=12,height=6)
+aggr(housingNumeric, numbers = TRUE, sortVars = TRUE,cex.axis=0.4,cex.numbers=0.6)
+dev.off()
+
+
+#comparison of LotFrontage to other variables to check the distribution changes
+# If the distribution of missing values is different than the known values in
+# relation to other variables, there could be a non-random reason for the missing
+# values. 
+housingNumeric |>
+  mutate(LF_missing = is.na(LotFrontage)) |>
+  ggplot(aes(LF_missing, SalePrice)) +
+  geom_boxplot()
+
+housingNumeric |>
+  mutate(LF_missing = is.na(LotFrontage)) |>
+  ggplot(aes(LF_missing, GrLivArea)) +
+  geom_boxplot()
+
+housingNumeric |>
+  mutate(LF_missing = is.na(LotFrontage)) |>
+  ggplot(aes(LF_missing, LotArea)) +
+  geom_boxplot()
+
+### (c) impute missing values of "LotFrontage" 
+base_LotF <- housingNumeric$LotFrontage
+hist(base_LotF,50)
+
+# i. using 'mean value imputation' -- replace_na(x, value)
+missing_mean_base_LotF <- mean(base_LotF,na.rm=TRUE)
+missing_variation_base_LotF <- var(base_LotF,na.rm=TRUE)
+mean_value_imp_LotFront <- replace_na(base_LotF,missing_mean_base_LotF)
+hist(mean_value_imp_LotFront,50)
+mvi_mean_LotFront <- mean(mean_value_imp_LotFront)
+mvi_variance_LotFront <- var(mean_value_imp_LotFront)
+
+# ii. using 'regression with error' -- replace_na(x ,values)
+model_regression_werror <- lm(base_LotF ~1)
+summary(model_regression_werror)
+# #lm(formula = base_LotF ~ 1)
+# 
+# Residuals:
+#   Min      1Q  Median      3Q     Max 
+# -47.745 -10.745  -0.745  11.255 244.255 
+# 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)  68.7453     0.8238   83.45   <2e-16 ***
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 23.2 on 792 degrees of freedom
+# (207 observations deleted due to missingness)
+n_missing <- sum(is.na(base_LotF))
+imputed_values <- rnorm(n_missing, mean = missing_mean_base_LotF,sd = 23.2)
+RWE_LotF <- base_LotF
+RWE_LotF[is.na(RWE_LotF)] <- imputed_values
+hist(RWE_LotF,50)
+
+# iii. PMM w/ mice
+
+imp_PMM <- mice(base_LotF, method = "pmm", m = 5)
+PMM_model <- lm(LotFrontage ~ LotArea + GrLivArea + OverallQual,
+                data = housingNumeric)
+base_LotF_4PMM <- as.data.frame(base_LotF)
+imp <- mice(
+  housingNumeric,
+  method = "pmm",
+  m = 5,
+  maxit = 20,
+  seed = 123
+)
+
+housingNumeric_imp <- complete(imp)
+summary(housingNumeric_imp)
+
+plot(imp)
+hist(housingNumeric_imp$LotFrontage,50)
+PMM_mean <- mean(housingNumeric_imp$LotFrontage)
+PMM_var <- var(housingNumeric_imp$LotFrontage)
+
+### (d)
+Ext_forcats_collapse <- housingData %>%
+  mutate(
+    Exterior1st = fct_lump_n(
+      Exterior1st,
+      n = 4,
+      other_level = "Other"))
+
+
+
+### (e)
+# i.
+avg_price_by_neighborhood <- housingData %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    avg_SalePrice = mean(SalePrice, na.rm = TRUE)
+  )
+
+#ii.
+boxplot(
+  SalePrice ~ Neighborhood,
+  data = housingData,
+  las = 2,
+  main = "Sale Price by Neighborhood",
+  xlab = "Neighborhood",
+  ylab = "Sale Price ($)"
+)
+
+ggplot(housingData,
+       aes(x = reorder(Neighborhood, SalePrice, median),
+           y = SalePrice)) +
+  geom_boxplot() +
+  labs(
+    title = "Sale Price by Neighborhood",
+    x = "Neighborhood",
+    y = "Sale Price ($)"
+  ) +
+  theme(axis.text.x = element_text(angle = 45,
+                                   hjust = 1))
+
+#iii.
+housing <- housingData %>%
+  mutate(
+    Neighborhood = fct_reorder(
+      Neighborhood,
+      SalePrice,
+      .fun = median,
+      .desc = TRUE))
+
+#iv.
+housing %>%
+  ggplot(aes(
+    x = fct_reorder(Neighborhood,
+                    SalePrice,
+                    median,
+                    .desc = TRUE),
+    y = SalePrice)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
