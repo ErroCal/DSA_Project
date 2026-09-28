@@ -13,5 +13,3 @@ library(corrplot)
 
 #initialize data into df, don't forget the "-" around the filename
 housingData <- read.csv("housingData.csv")
-
-#Set up something different
