@@ -12,4 +12,11 @@ library(naniar)
 library(corrplot)
 
 #initialize data into df, don't forget the "-" around the filename
-housingData <- read.csv("housingData.csv")
+housingData <- read_csv("housingData.csv")
+
+# set up new variables! <-- These are from a "reliable source" 
+housingData <- housingData %>%
+  dplyr::mutate(age = YrSold - YearBuilt,
+                ageSinceRemodel = YrSold - YearRemodAdd,
+                ageofGarage = YrSold - GarageYrBlt)
+
