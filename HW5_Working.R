@@ -59,38 +59,5 @@ plot(model1$model$SalePrice, fitted(model1),
      xlab = "Actual SalePrice", ylab = "Predicted SalePrice")
 abline(0, 1, col = "red")
 
-#Numeric Models
-modelNumeric1 <- lm(SalePrice ~ . - Id, data = housingNumeric)
-summary(modelNumeric1)
 
-modelNumeric2 <- lm(SalePrice ~ . - Id - TotalBsmtSF - GrLivArea,
-             data = housingNumeric)
-summary(modelNumeric2)
-
-plot(modelNumeric2)
-
-plot(housingNumeric$SalePrice[as.numeric(names(fitted(modelNumeric2)))], fitted(modelNumeric2),
-     xlab = "Actual SalePrice", ylab = "Predicted SalePrice")
-abline(0, 1, col = "red")
-
-#Factor Models
-housingFactor <- cbind(housingFactor, SalePrice = housingData$SalePrice)
-
-modelFactor1 <- lm(SalePrice ~ ., data = housingFactor)
-summary(modelFactor1)
-
-#Need to assume that the NAs mean "None." This code converts that. 
-cols <- c("BsmtQual","BsmtCond","BsmtExposure","BsmtFinType1","BsmtFinType2",
-          "FireplaceQu","GarageType","GarageFinish","GarageQual","GarageCond","Fence")
-for (c in cols) {
-  x <- as.character(housingFactor[[c]])
-  x[is.na(x)] <- "None"
-  housingFactor[[c]] <- factor(x)
-}
-
-#Create a new factor model.
-
-modelFactor2 <- lm(SalePrice ~ ., data = housingFactor)
-summary(modelFactor2)
-plot(modelFactor2)
 
