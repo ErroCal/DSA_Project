@@ -11,38 +11,86 @@ library(MASS)
 library(naniar)
 library(corrplot)
 
-#initialize data into df, don't forget the "-" around the filename
+#initialize data into df, don't forget the "-" around the filename.
+#Some variables do not have multiple levels.
+#These have to be removed or some models will not run
 housingData <- read.csv("housingData.csv")
+housingData$PoolQC <- NULL
+housingData$Alley <- NULL
+housingData$MiscFeature <- NULL
 
 #Make the SalePrice Log
 housingData = housingData %>%
   dplyr::mutate(SalePrice = log(SalePrice))
 
-#A better summary of the data
+
+#A better summary of the data. Dropped PoolQC. (998 NAs / 1000 obs.)
 install.packages("skimr")
 library(skimr)
 skim(housingData)
 
-#Split into Numeric Values
+#Split into Numeric Values (Probably not needed)
 housingNumeric = housingData %>%
   dplyr::select(where(is.numeric))
 
-#Split into Factor values
+#Split into Factor values (Probably not needed)
 housingFactor = housingData %>%
   dplyr::select(-where(is.numeric))
 
-#Numeric Summary Function
-myNumericSummary <- function(x){
-  c(length(x), n_distinct(x), sum(is.na(x)), mean(x, na.rm=TRUE),
-    min(x,na.rm=TRUE), median(x,na.rm=TRUE),
-    max(x,na.rm=TRUE), sd(x,na.rm=TRUE))
+#OLS regression models
+
+#OLS model1. First it changes the NA values to "None" because otherwise the
+#model does not work. Assumes NA is just "None." May have to change this.
+
+cols <- c("BsmtQual","BsmtCond","BsmtExposure","BsmtFinType1","BsmtFinType2",
+          "FireplaceQu","GarageType","GarageFinish","GarageQual","GarageCond","Fence")
+
+for (c in cols) {
+  x <- as.character(housingData[[c]])
+  x[is.na(x)] <- "None"
+  housingData[[c]] <- factor(x)
 }
 
-#Makes the numericSummary
-numericSummary <- housingNumeric %>%
-  dplyr::reframe(across(everything(), myNumericSummary))
+model1 = lm(SalePrice ~ . - Id, data = housingData)
+summary(model1)
+plot(model1)
 
-#Creates row labels
-numericSummary <-cbind(
-  stat=c("n","unique","missing","mean","min","median","max","sd"),
-  numericSummary)
+plot(model1$model$SalePrice, fitted(model1),
+     xlab = "Actual SalePrice", ylab = "Predicted SalePrice")
+abline(0, 1, col = "red")
+
+#Numeric Models
+modelNumeric1 <- lm(SalePrice ~ . - Id, data = housingNumeric)
+summary(modelNumeric1)
+
+modelNumeric2 <- lm(SalePrice ~ . - Id - TotalBsmtSF - GrLivArea,
+             data = housingNumeric)
+summary(modelNumeric2)
+
+plot(modelNumeric2)
+
+plot(housingNumeric$SalePrice[as.numeric(names(fitted(modelNumeric2)))], fitted(modelNumeric2),
+     xlab = "Actual SalePrice", ylab = "Predicted SalePrice")
+abline(0, 1, col = "red")
+
+#Factor Models
+housingFactor <- cbind(housingFactor, SalePrice = housingData$SalePrice)
+
+modelFactor1 <- lm(SalePrice ~ ., data = housingFactor)
+summary(modelFactor1)
+
+#Need to assume that the NAs mean "None." This code converts that. 
+cols <- c("BsmtQual","BsmtCond","BsmtExposure","BsmtFinType1","BsmtFinType2",
+          "FireplaceQu","GarageType","GarageFinish","GarageQual","GarageCond","Fence")
+for (c in cols) {
+  x <- as.character(housingFactor[[c]])
+  x[is.na(x)] <- "None"
+  housingFactor[[c]] <- factor(x)
+}
+
+#Create a new factor model.
+
+modelFactor2 <- lm(SalePrice ~ ., data = housingFactor)
+summary(modelFactor2)
+plot(modelFactor2)
+
