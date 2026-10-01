@@ -25,6 +25,9 @@ housingData <- housingData %>%
 housingData <- housingData |>
   dplyr::mutate(logSale = log(SalePrice))
 
+pdf("tooBigPlot.pdf", width = 12, height = 12)
+plot(housingData)
+dev.off()
 # #initialize data into df, don't forget the "-" around the filename.
 # #Some variables do not have multiple factor levels.
 # #These have to be removed or some models will not run
