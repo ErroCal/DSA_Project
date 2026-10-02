@@ -36,23 +36,26 @@ housingNumeric = housingData %>%
   dplyr::select(where(is.numeric))
 housingNumeric <- as.data.frame(housingNumeric)
 
-#Split into Factor values (Probably not needed)
-# housingFactor = housingData %>%
-#   dplyr::select(-where(is.numeric))
-# housingFactor <- as.data.frame(housingFactor)
-
 housingFactor <- housingData |>
   dplyr::select(!where(is.numeric)) |>
   mutate(across(everything(),as.factor))
 
 index <- seq_along(housingNumeric)
+index_r <- seq_along(housingNumeric[,1])
 housingNum_Log <- matrix(0, nrow = index, ncol = 1000)
 pdf("histofall_preLOG.pdf", height = 12, width = 12)
-for (c in index) {
+for (c in index) { 
   hist(housingNumeric[,c],main = paste("Pre_log of",housingNumeric[0,c]))
-  housingNum_Log[c] <- log(housingNumeric[,c])
 }
 dev.off()
+
+
+for (c in index) {
+  for (r in index_r) {
+  housingNum_Log[c,r] <- log(housingNumeric[c,r])
+  }
+}
+
 
 pdf("histofall_POSTlog.pdf", height = 12, width = 12)
 for (c in index) {
