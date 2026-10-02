@@ -31,7 +31,7 @@ housingData$PoolQC <- NULL #Missing 998 values, not helpful, make NULL
 housingData$MiscFeature <- NULL #includes Sheds, Redundant with "MiscVal"! set NULL
 housingData$Id <- NULL #not needed for analysis, removed
 
-#Split into Numeric Values (Probably not needed)
+#Split into Numeric Values
 housingNumeric = housingData %>%
   dplyr::select(where(is.numeric))
 housingNumeric <- as.data.frame(housingNumeric)
@@ -42,44 +42,37 @@ housingFactor <- housingData |>
 
 index <- seq_along(housingNumeric)
 index_r <- seq_along(housingNumeric[,1])
-housingNum_Log <- housingNumeric
+housing_NumNorm <- housingNumeric
+
+
+# z-scale the entire data set to reduce scaling error
+housing_NumNorm <- as.data.frame(scale(housingNumeric))
+
+# log the values in data set for 'norming' the distribution
+housing_NumLog <- log(housing_NumNorm)
+
 pdf("histofall_preLOG.pdf", height = 12, width = 12)
 for (c in index) { 
-  hist(housingNumeric[,c],main = paste("Pre_log of",housingNumeric[0,c]))
+  hist(housing_NumNorm[,c],main = paste("Pre_log of",housingNumeric[0,c]))
+  qqnorm(housing_NumNorm[,c],main = paste("Pre_log of QQ_Norm",housingNumeric[0,c]))
+  qqline(housing_NumNorm[,c], col = "purple", lwd = 2)
 }
 dev.off()
-
-
-housingNum_Log[index_r, c] <- log(housingNumeric[index_r,c])
-
-# for (c in index) {
-#   for (r in index_r) {
-#   housingNum_Log[r,c] <- log(housingNumeric[r,c])
-#   }
-# }
 
 
 pdf("histofall_POSTlog.pdf", height = 12, width = 12)
 for (c in index) {
-  hist(housingNum_Log[,c],main = paste("POST_log of",housingNumeric[0,c]))
+  hist(housing_NumLog[,c],main = paste("POST_log of",housingNumeric[0,c]))
+  qqnorm(housing_NumLog[,c],main = paste("POST_log of QQ_Norm",housingNumeric[0,c]))
+  qqline(housing_NumLog[,c], col = "pink", lwd = 2
+  )
 }
 dev.off()
 ###### TODO:::
 # For Numeric:
-#plot a histogram of everything (but that is readable) to find skewed data
-par(mfrow = c(3, 4))
-lapply(names(housingNumeric), function(x)
-  hist(housingNumeric[[x]], main = x))
 
-# qq plots for 'normality check'
-numeric_vars <- housingNumeric
-png("qqplot.png", width = 1200, height = 1200,res = 200)
-qqnorm(housingNumeric$YearBuilt)
-qqline(na.omit(housingNumeric$YearBuilt), col='red')
-dev.off()
-# boxcox plots for numerics to evaluate lambda power ladder changes
 
-# 1. normalize all
+# 1. normalize all - DONE-ish double check LOG necessity
 # 2. missing value eval
 # 3. outlier evaluation -> Generalized ESD (Extreme Studentized Deviate)
 # 4. imputation of missing values?
