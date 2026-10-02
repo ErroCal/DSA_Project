@@ -10,6 +10,7 @@ library(car)
 library(MASS)
 library(naniar)
 library(corrplot)
+library(EnvStats)
 
 
 #initialize data into df, don't forget the "-" around the filename
@@ -25,9 +26,79 @@ housingData <- housingData %>%
 housingData <- housingData |>
   dplyr::mutate(logSale = log(SalePrice))
 
-pdf("tooBigPlot.pdf", width = 12, height = 12)
-plot(housingData)
+housingData$PoolQC <- NULL #Missing 998 values, not helpful, make NULL
+# housingData$Alley <- NULL Missing 938 values, however!!!NA = no alley, Does specify type of alley in 2 levels. 
+housingData$MiscFeature <- NULL #includes Sheds, Redundant with "MiscVal"! set NULL
+housingData$Id <- NULL #not needed for analysis, removed
+
+#Split into Numeric Values (Probably not needed)
+housingNumeric = housingData %>%
+  dplyr::select(where(is.numeric))
+housingNumeric <- as.data.frame(housingNumeric)
+
+#Split into Factor values (Probably not needed)
+# housingFactor = housingData %>%
+#   dplyr::select(-where(is.numeric))
+# housingFactor <- as.data.frame(housingFactor)
+
+housingFactor <- housingData |>
+  dplyr::select(!where(is.numeric)) |>
+  mutate(across(everything(),as.factor))
+
+index <- seq_along(housingNumeric)
+pdf("histofall_preLOG.pdf", height = 12, width = 12)
+for (c in index) {
+  hist(housingNumeric[,c],main = paste("Pre_log of",housingNumeric[0,c]))
+  housingNum_Log <- log(housingNumeric[,c])
+}
 dev.off()
+
+pdf("histofall_POSTlog.pdf", height = 12, width = 12)
+for (c in index) {
+  hist(housingNum_Log[,c],main = paste("POST_log of",housingNumeric[0,c]))
+}
+dev.off()
+###### TODO:::
+# For Numeric:
+#plot a histogram of everything (but that is readable) to find skewed data
+par(mfrow = c(3, 4))
+lapply(names(housingNumeric), function(x)
+  hist(housingNumeric[[x]], main = x))
+
+# qq plots for 'normality check'
+numeric_vars <- housingNumeric
+png("qqplot.png", width = 1200, height = 1200,res = 200)
+qqnorm(housingNumeric$YearBuilt)
+qqline(na.omit(housingNumeric$YearBuilt), col='red')
+dev.off()
+# boxcox plots for numerics to evaluate lambda power ladder changes
+
+# 1. normalize all
+# 2. missing value eval
+# 3. outlier evaluation -> Generalized ESD (Extreme Studentized Deviate)
+# 4. imputation of missing values?
+# 5. correlation analysis -> between numeric values
+# 6. Multicorrelated variables?
+
+# For Factors:
+# 1. Single Level factors? (i.e. True or False, 0 or 1, etc.)
+# 2. Grouping of factors via numeric values? 
+# 3. correlation analysis -> between factors
+
+# For BOTH:
+# correlation analysis on all, after data wrangling complete. 
+# t-SNE dimension reduction?
+
+
+#plot into .pdf file for extra space
+pdf("tooBigPlot.pdf", width = 12, height = 12)
+plot(housingNumeric)
+dev.off()
+
+
+
+
+
 # #initialize data into df, don't forget the "-" around the filename.
 # #Some variables do not have multiple factor levels.
 # #These have to be removed or some models will not run
