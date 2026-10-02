@@ -42,7 +42,7 @@ housingFactor <- housingData |>
 
 index <- seq_along(housingNumeric)
 index_r <- seq_along(housingNumeric[,1])
-housingNum_Log <- matrix(0, nrow = index, ncol = 1000)
+housingNum_Log <- housingNumeric
 pdf("histofall_preLOG.pdf", height = 12, width = 12)
 for (c in index) { 
   hist(housingNumeric[,c],main = paste("Pre_log of",housingNumeric[0,c]))
@@ -50,11 +50,13 @@ for (c in index) {
 dev.off()
 
 
-for (c in index) {
-  for (r in index_r) {
-  housingNum_Log[c,r] <- log(housingNumeric[c,r])
-  }
-}
+housingNum_Log[index_r, c] <- log(housingNumeric[index_r,c])
+
+# for (c in index) {
+#   for (r in index_r) {
+#   housingNum_Log[r,c] <- log(housingNumeric[r,c])
+#   }
+# }
 
 
 pdf("histofall_POSTlog.pdf", height = 12, width = 12)
